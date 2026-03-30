@@ -17,19 +17,39 @@ import {
   ChevronLeft, ChevronRight, Wand2, Send, Plus, Trash2,
   RefreshCw, AlertCircle, CheckCircle2, StickyNote,
 } from "lucide-react";
-import { ShiftWithUser, UserWithStats } from "@/types";
-import { cn, positionColor, positionLabel, getInitials, formatTime, performanceColor, performanceLabel } from "@/lib/utils";
+import { ShiftWithUser, UserWithStats, Position } from "@/types";
+import { cn, positionColor, positionLabel, getInitials, formatTime, performanceColor } from "@/lib/utils";
 import { toast } from "@/hooks/use-toast";
 import { ShiftModal } from "./ShiftModal";
 import { ShiftNotesModal } from "./ShiftNotesModal";
 
 const DAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 
+// House classification
+const FOH_POSITIONS: Position[] = ["SERVER", "BARTENDER", "HOST", "BUSSER", "MANAGER", "GENERAL_MANAGER"];
+const BOH_POSITIONS: Position[] = ["COOK", "SOUS_CHEF", "HEAD_CHEF", "DISHWASHER"];
+
+type House = "FOH" | "BOH";
+
+function getHouse(position: Position): House {
+  return BOH_POSITIONS.includes(position) ? "BOH" : "FOH";
+}
+
+// Cell ID helpers — avoid splitting by "-" since date contains dashes
+function makeCellId(dateStr: string, tIndex: number): string {
+  return `cell::${dateStr}::${tIndex}`;
+}
+function parseCellId(cellId: string): { dateStr: string; templateIndex: number } | null {
+  if (!cellId.startsWith("cell::")) return null;
+  const parts = cellId.split("::");
+  if (parts.length !== 3) return null;
+  return { dateStr: parts[1], templateIndex: parseInt(parts[2]) };
+}
+
 interface AdminScheduleBuilderProps {
   currentUserId: string;
 }
 
-// Draggable employee card (from left panel)
 function DraggableEmployee({ employee }: { employee: UserWithStats }) {
   const { attributes, listeners, setNodeRef, isDragging } = useDraggable({
     id: `employee-${employee.id}`,
@@ -53,23 +73,15 @@ function DraggableEmployee({ employee }: { employee: UserWithStats }) {
         <p className="text-xs font-medium text-gray-900 truncate">{employee.name}</p>
         <p className="text-xs text-gray-500 truncate">{positionLabel(employee.position)}</p>
       </div>
-      <span className={cn("text-xs font-bold", performanceColor(employee.performanceScore))}>
+      <span className={cn("text-xs font-bold tabular-nums", performanceColor(employee.performanceScore))}>
         {employee.performanceScore}
       </span>
     </div>
   );
 }
 
-// Droppable shift slot cell
 function DroppableShiftCell({
-  cellId,
-  shifts,
-  onDelete,
-  onAddShift,
-  onOpenNotes,
-  date,
-  templateStart,
-  templateEnd,
+  cellId, shifts, onDelete, onAddShift, onOpenNotes, date, templateStart, templateEnd,
 }: {
   cellId: string;
   shifts: ShiftWithUser[];
@@ -91,12 +103,7 @@ function DroppableShiftCell({
       )}
     >
       {shifts.map((shift) => (
-        <ShiftCellCard
-          key={shift.id}
-          shift={shift}
-          onDelete={onDelete}
-          onOpenNotes={onOpenNotes}
-        />
+        <ShiftCellCard key={shift.id} shift={shift} onDelete={onDelete} onOpenNotes={onOpenNotes} />
       ))}
       <button
         onClick={() => onAddShift(date, templateStart, templateEnd)}
@@ -108,11 +115,7 @@ function DroppableShiftCell({
   );
 }
 
-function ShiftCellCard({
-  shift,
-  onDelete,
-  onOpenNotes,
-}: {
+function ShiftCellCard({ shift, onDelete, onOpenNotes }: {
   shift: ShiftWithUser;
   onDelete: (id: string) => void;
   onOpenNotes: (shift: ShiftWithUser) => void;
@@ -133,18 +136,10 @@ function ShiftCellCard({
         </p>
       </div>
       <div className="opacity-0 group-hover:opacity-100 flex items-center gap-0.5 transition">
-        <button
-          onClick={() => onOpenNotes(shift)}
-          className="p-0.5 rounded hover:bg-white/80 text-gray-400 hover:text-blue-500"
-          title="Notes"
-        >
+        <button onClick={() => onOpenNotes(shift)} className="p-0.5 rounded hover:bg-white/80 text-gray-400 hover:text-blue-500" title="Notes">
           <StickyNote className="w-3 h-3" />
         </button>
-        <button
-          onClick={() => onDelete(shift.id)}
-          className="p-0.5 rounded hover:bg-white/80 text-gray-400 hover:text-red-500"
-          title="Remove"
-        >
+        <button onClick={() => onDelete(shift.id)} className="p-0.5 rounded hover:bg-white/80 text-gray-400 hover:text-red-500" title="Remove">
           <Trash2 className="w-3 h-3" />
         </button>
       </div>
@@ -169,6 +164,7 @@ export function AdminScheduleBuilder({ currentUserId }: AdminScheduleBuilderProp
   const [preselectedTimes, setPreselectedTimes] = useState<{ start: string; end: string } | null>(null);
   const [notesShift, setNotesShift] = useState<ShiftWithUser | null>(null);
   const [searchFilter, setSearchFilter] = useState("");
+  const [activeHouse, setActiveHouse] = useState<House>("FOH");
 
   const weekStart = startOfWeek(currentWeek, { weekStartsOn: 1 });
   const weekEnd = endOfWeek(currentWeek, { weekStartsOn: 1 });
@@ -184,9 +180,7 @@ export function AdminScheduleBuilder({ currentUserId }: AdminScheduleBuilderProp
         fetch("/api/restaurant"),
       ]);
       const [shiftsData, empData, restData] = await Promise.all([
-        shiftsRes.json(),
-        empRes.json(),
-        restRes.json(),
+        shiftsRes.json(), empRes.json(), restRes.json(),
       ]);
       setShifts(shiftsData);
       setEmployees(empData);
@@ -201,13 +195,14 @@ export function AdminScheduleBuilder({ currentUserId }: AdminScheduleBuilderProp
 
   useEffect(() => { fetchData(); }, [fetchData]);
 
-  const getShiftsForCell = (date: Date, templateStart: string, templateEnd: string) => {
+  const getShiftsForCell = (date: Date, templateStart: string, templateEnd: string, house: House) => {
     const dateStr = format(date, "yyyy-MM-dd");
     return shifts.filter(
       (s) =>
         format(new Date(s.date), "yyyy-MM-dd") === dateStr &&
         s.startTime === templateStart &&
-        s.endTime === templateEnd
+        s.endTime === templateEnd &&
+        getHouse(s.position) === house
     );
   };
 
@@ -227,11 +222,8 @@ export function AdminScheduleBuilder({ currentUserId }: AdminScheduleBuilderProp
         toast({ title: "Generation failed", description: data.error, variant: "destructive" });
         return;
       }
-      setShifts((prev) => {
-        const nonDraft = prev.filter((s) => s.status !== "DRAFT");
-        return [...nonDraft, ...data.shifts];
-      });
-      toast({ title: `Schedule generated`, description: `${data.count} shifts created as draft.` });
+      setShifts((prev) => [...prev.filter((s) => s.status !== "DRAFT"), ...data.shifts]);
+      toast({ title: "Schedule generated", description: `${data.count} shifts created as draft.` });
     } catch {
       toast({ title: "Error", variant: "destructive" });
     } finally {
@@ -250,9 +242,7 @@ export function AdminScheduleBuilder({ currentUserId }: AdminScheduleBuilderProp
       const data = await res.json();
       if (!res.ok) throw new Error();
       setShifts((prev) =>
-        prev.map((s) =>
-          s.status === "DRAFT" ? { ...s, status: "SCHEDULED" as any, isPublished: true } : s
-        )
+        prev.map((s) => s.status === "DRAFT" ? { ...s, status: "SCHEDULED" as any, isPublished: true } : s)
       );
       toast({ title: "Schedule published!", description: `${data.published} shifts pushed to employees.` });
     } catch {
@@ -272,9 +262,8 @@ export function AdminScheduleBuilder({ currentUserId }: AdminScheduleBuilderProp
   };
 
   const handleDragStart = (event: DragStartEvent) => {
-    const { data } = event.active;
-    if (data.current?.type === "employee") {
-      setActiveEmployee(data.current.employee);
+    if (event.active.data.current?.type === "employee") {
+      setActiveEmployee(event.active.data.current.employee);
     }
   };
 
@@ -286,21 +275,17 @@ export function AdminScheduleBuilder({ currentUserId }: AdminScheduleBuilderProp
     const dragData = active.data.current;
     if (dragData?.type !== "employee") return;
 
-    // over.id format: "cell-{dateStr}-{templateIndex}"
-    const overId = String(over.id);
-    if (!overId.startsWith("cell-")) return;
+    const parsed = parseCellId(String(over.id));
+    if (!parsed) return;
 
-    const parts = overId.split("-");
-    const dateStr = parts[1];
-    const templateIndex = parseInt(parts[2]);
+    const { dateStr, templateIndex } = parsed;
     const template = shiftTemplates[templateIndex];
     if (!template) return;
 
     const employee: UserWithStats = dragData.employee;
-    const date = new Date(dateStr);
+    const date = new Date(dateStr + "T12:00:00"); // noon to avoid timezone issues
 
-    // Check not already assigned to this cell
-    const existingInCell = getShiftsForCell(date, template.start, template.end);
+    const existingInCell = getShiftsForCell(date, template.start, template.end, activeHouse);
     if (existingInCell.some((s) => s.userId === employee.id)) {
       toast({ title: "Already scheduled", description: `${employee.name} is already in this slot.` });
       return;
@@ -322,7 +307,7 @@ export function AdminScheduleBuilder({ currentUserId }: AdminScheduleBuilderProp
       if (!res.ok) throw new Error();
       const saved = await res.json();
       setShifts((prev) => [...prev, saved]);
-      toast({ title: `${employee.name} added to ${template.name} shift` });
+      toast({ title: `${employee.name} added to ${template.name}` });
     } catch {
       toast({ title: "Error", description: "Failed to assign shift.", variant: "destructive" });
     }
@@ -343,11 +328,15 @@ export function AdminScheduleBuilder({ currentUserId }: AdminScheduleBuilderProp
     setShowShiftModal(false);
   };
 
-  const filteredEmployees = employees.filter(
+  const houseEmployees = employees.filter((e) => getHouse(e.position) === activeHouse);
+  const filteredEmployees = houseEmployees.filter(
     (e) =>
       e.name.toLowerCase().includes(searchFilter.toLowerCase()) ||
       positionLabel(e.position).toLowerCase().includes(searchFilter.toLowerCase())
   );
+
+  const fohCount = employees.filter((e) => getHouse(e.position) === "FOH").length;
+  const bohCount = employees.filter((e) => getHouse(e.position) === "BOH").length;
 
   return (
     <DndContext sensors={sensors} onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
@@ -360,6 +349,28 @@ export function AdminScheduleBuilder({ currentUserId }: AdminScheduleBuilderProp
               <p className="text-sm font-semibold text-gray-900">Staff</p>
               <p className="text-xs text-gray-500 mt-0.5">Drag onto schedule</p>
             </div>
+
+            {/* House tabs in left panel */}
+            <div className="flex border-b border-gray-100">
+              {(["FOH", "BOH"] as House[]).map((h) => (
+                <button
+                  key={h}
+                  onClick={() => setActiveHouse(h)}
+                  className={cn(
+                    "flex-1 py-2 text-xs font-medium transition",
+                    activeHouse === h
+                      ? "text-blue-600 border-b-2 border-blue-500"
+                      : "text-gray-400 hover:text-gray-600"
+                  )}
+                >
+                  {h}
+                  <span className="ml-1 text-[10px] opacity-70">
+                    ({h === "FOH" ? fohCount : bohCount})
+                  </span>
+                </button>
+              ))}
+            </div>
+
             <div className="px-3 pt-3">
               <input
                 value={searchFilter}
@@ -374,6 +385,9 @@ export function AdminScheduleBuilder({ currentUserId }: AdminScheduleBuilderProp
                 .map((emp) => (
                   <DraggableEmployee key={emp.id} employee={emp} />
                 ))}
+              {filteredEmployees.length === 0 && (
+                <p className="text-xs text-gray-400 text-center py-4">No {activeHouse} staff</p>
+              )}
             </div>
             <div className="px-3 pb-3">
               <div className="text-xs text-gray-400 space-y-0.5 pt-2 border-t border-gray-100">
@@ -413,7 +427,7 @@ export function AdminScheduleBuilder({ currentUserId }: AdminScheduleBuilderProp
               {hasDraftShifts && (
                 <div className="flex items-center gap-1.5 px-3 py-1.5 bg-yellow-50 border border-yellow-200 rounded-lg text-xs text-yellow-700">
                   <AlertCircle className="w-3.5 h-3.5" />
-                  Draft schedule — not visible to employees
+                  Draft — not visible to employees
                 </div>
               )}
               <button
@@ -433,6 +447,30 @@ export function AdminScheduleBuilder({ currentUserId }: AdminScheduleBuilderProp
                 {publishing ? "Publishing..." : "Publish"}
               </button>
             </div>
+          </div>
+
+          {/* FOH / BOH tabs */}
+          <div className="flex border-b border-gray-200">
+            {(["FOH", "BOH"] as House[]).map((h) => (
+              <button
+                key={h}
+                onClick={() => setActiveHouse(h)}
+                className={cn(
+                  "px-6 py-2.5 text-sm font-medium border-b-2 transition",
+                  activeHouse === h
+                    ? "border-blue-500 text-blue-600"
+                    : "border-transparent text-gray-500 hover:text-gray-700"
+                )}
+              >
+                {h === "FOH" ? "Front of House" : "Back of House"}
+                <span className={cn(
+                  "ml-2 text-xs px-1.5 py-0.5 rounded-full",
+                  activeHouse === h ? "bg-blue-100 text-blue-600" : "bg-gray-100 text-gray-500"
+                )}>
+                  {h === "FOH" ? fohCount : bohCount}
+                </span>
+              </button>
+            ))}
           </div>
 
           {/* Status legend */}
@@ -455,7 +493,6 @@ export function AdminScheduleBuilder({ currentUserId }: AdminScheduleBuilderProp
 
           {/* Grid */}
           <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
-            {/* Day headers */}
             <div className="grid border-b border-gray-200" style={{ gridTemplateColumns: `80px repeat(7, 1fr)` }}>
               <div className="px-3 py-3 bg-gray-50 text-xs font-medium text-gray-500 border-r border-gray-200">Shift</div>
               {DAYS.map((day, i) => {
@@ -470,13 +507,8 @@ export function AdminScheduleBuilder({ currentUserId }: AdminScheduleBuilderProp
               })}
             </div>
 
-            {/* Shift rows */}
             {shiftTemplates.map((template, tIndex) => (
-              <div
-                key={tIndex}
-                className="grid border-b border-gray-100 last:border-b-0"
-                style={{ gridTemplateColumns: `80px repeat(7, 1fr)` }}
-              >
+              <div key={tIndex} className="grid border-b border-gray-100 last:border-b-0" style={{ gridTemplateColumns: `80px repeat(7, 1fr)` }}>
                 <div className="px-3 py-3 bg-gray-50 border-r border-gray-200 flex flex-col justify-center">
                   <p className="text-xs font-semibold text-gray-700">{template.name}</p>
                   <p className="text-[10px] text-gray-400 mt-0.5">
@@ -486,8 +518,8 @@ export function AdminScheduleBuilder({ currentUserId }: AdminScheduleBuilderProp
                 {DAYS.map((_, dayIndex) => {
                   const date = addDays(weekStart, dayIndex);
                   const dateStr = format(date, "yyyy-MM-dd");
-                  const cellId = `cell-${dateStr}-${tIndex}`;
-                  const cellShifts = getShiftsForCell(date, template.start, template.end);
+                  const cellId = makeCellId(dateStr, tIndex);
+                  const cellShifts = getShiftsForCell(date, template.start, template.end, activeHouse);
                   const today = isToday(date);
                   return (
                     <div key={dayIndex} className={cn("p-1.5 border-r border-gray-100 last:border-r-0", today && "bg-blue-50/30")}>
@@ -514,7 +546,6 @@ export function AdminScheduleBuilder({ currentUserId }: AdminScheduleBuilderProp
         </div>
       </div>
 
-      {/* Drag overlay */}
       <DragOverlay>
         {activeEmployee && (
           <div className="flex items-center gap-2.5 p-2.5 bg-white rounded-lg border-2 border-blue-400 shadow-lg w-52 cursor-grabbing">
