@@ -12,6 +12,8 @@ import {
   ChefHat,
   Settings,
   CalendarOff,
+  ArrowLeftRight,
+  Store,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { Role } from "@/types";
@@ -26,9 +28,11 @@ interface NavItem {
 const navItems: NavItem[] = [
   { label: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
   { label: "Schedule", href: "/schedule", icon: Calendar },
-  { label: "Employees", href: "/employees", icon: Users, roles: ["ADMIN", "MANAGER"] },
+  { label: "Employees", href: "/employees", icon: Users, roles: ["ADMIN"] },
   { label: "Availability", href: "/availability", icon: Clock },
   { label: "Time Off", href: "/time-off", icon: CalendarOff },
+  { label: "Shift Swaps", href: "/swaps", icon: ArrowLeftRight },
+  { label: "Restaurant", href: "/restaurant", icon: Store, roles: ["ADMIN"] },
   { label: "Settings", href: "/settings", icon: Settings },
 ];
 

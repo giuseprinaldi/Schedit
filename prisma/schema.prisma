@@ -10,35 +10,40 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-// Role values: ADMIN | MANAGER | EMPLOYEE
+// Role values: ADMIN | EMPLOYEE
 // Position values: SERVER | BARTENDER | HOST | COOK | SOUS_CHEF | HEAD_CHEF | DISHWASHER | BUSSER | MANAGER | GENERAL_MANAGER
-// ShiftStatus values: SCHEDULED | CONFIRMED | COMPLETED | CANCELLED | NO_SHOW
+// ShiftStatus values: DRAFT | SCHEDULED | CONFIRMED | COMPLETED | CANCELLED | NO_SHOW
 // TimeOffStatus values: PENDING | APPROVED | DENIED
 // DayOfWeek values: MONDAY | TUESDAY | WEDNESDAY | THURSDAY | FRIDAY | SATURDAY | SUNDAY
+// SwapType values: SWAP | GIVEAWAY
+// SwapStatus values: PENDING | APPROVED | DENIED | CANCELLED
 
 model User {
-  id            String    @id @default(cuid())
-  name          String
-  email         String    @unique
-  emailVerified DateTime?
-  image         String?
-  password      String?
-  role          String    @default("EMPLOYEE")
-  position      String    @default("SERVER")
-  phone         String?
-  hourlyRate    Float?
-  isActive      Boolean   @default(true)
-  hireDate      DateTime  @default(now())
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
+  id               String    @id @default(cuid())
+  name             String
+  email            String    @unique
+  emailVerified    DateTime?
+  image            String?
+  password         String?
+  role             String    @default("EMPLOYEE")
+  position         String    @default("SERVER")
+  phone            String?
+  hourlyRate       Float?
+  performanceScore Int       @default(50)
+  isActive         Boolean   @default(true)
+  hireDate         DateTime  @default(now())
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
 
-  accounts      Account[]
-  sessions      Session[]
-  shifts        Shift[]
-  availability  Availability[]
-  timeOffRequests TimeOffRequest[]
-  notificationsReceived Notification[] @relation("NotificationRecipient")
-  notificationsSent     Notification[] @relation("NotificationSender")
+  accounts              Account[]
+  sessions              Session[]
+  shifts                Shift[]
+  availability          Availability[]
+  timeOffRequests       TimeOffRequest[]
+  notificationsReceived Notification[]    @relation("NotificationRecipient")
+  notificationsSent     Notification[]    @relation("NotificationSender")
+  swapRequestsMade      ShiftSwapRequest[] @relation("SwapRequester")
+  swapRequestsTargeted  ShiftSwapRequest[] @relation("SwapTarget")
 }
 
 model Account {
@@ -76,6 +81,19 @@ model VerificationToken {
   @@unique([identifier, token])
 }
 
+model Restaurant {
+  id             String   @id @default(cuid())
+  name           String   @default("My Restaurant")
+  ownerId        String   @unique
+  openDays       String   @default("[\"MONDAY\",\"TUESDAY\",\"WEDNESDAY\",\"THURSDAY\",\"FRIDAY\",\"SATURDAY\",\"SUNDAY\"]")
+  openTime       String   @default("09:00")
+  closeTime      String   @default("22:00")
+  shiftTemplates String   @default("[{\"name\":\"Morning\",\"start\":\"09:00\",\"end\":\"17:00\"},{\"name\":\"Evening\",\"start\":\"16:00\",\"end\":\"23:00\"}]")
+  minStaffPerShift Int    @default(3)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+}
+
 model Shift {
   id          String   @id @default(cuid())
   date        DateTime
@@ -86,10 +104,41 @@ model Shift {
   notes       String?
   userId      String
   createdById String?
+  isPublished Boolean  @default(false)
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
-  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user        User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  shiftNotes  ShiftNote[]
+  swapRequests ShiftSwapRequest[]
+}
+
+model ShiftNote {
+  id         String   @id @default(cuid())
+  shiftId    String
+  forUserId  String?
+  content    String
+  createdById String
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  shift      Shift    @relation(fields: [shiftId], references: [id], onDelete: Cascade)
+}
+
+model ShiftSwapRequest {
+  id          String   @id @default(cuid())
+  requesterId String
+  targetId    String?
+  shiftId     String
+  type        String   @default("GIVEAWAY")
+  status      String   @default("PENDING")
+  message     String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  requester   User     @relation("SwapRequester", fields: [requesterId], references: [id], onDelete: Cascade)
+  target      User?    @relation("SwapTarget", fields: [targetId], references: [id], onDelete: SetNull)
+  shift       Shift    @relation(fields: [shiftId], references: [id], onDelete: Cascade)
 }
 
 model Availability {

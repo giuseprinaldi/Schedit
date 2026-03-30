@@ -16,29 +16,22 @@ export function formatTime(time: string): string {
 export function calculateShiftDuration(startTime: string, endTime: string): number {
   const [startHours, startMins] = startTime.split(":").map(Number);
   const [endHours, endMins] = endTime.split(":").map(Number);
-
   let startTotal = startHours * 60 + startMins;
   let endTotal = endHours * 60 + endMins;
-
-  if (endTotal <= startTotal) {
-    endTotal += 24 * 60; // Handle overnight shifts
-  }
-
+  if (endTotal <= startTotal) endTotal += 24 * 60;
   return (endTotal - startTotal) / 60;
 }
 
 export function formatShiftDuration(startTime: string, endTime: string): string {
   const hours = calculateShiftDuration(startTime, endTime);
-  if (hours === Math.floor(hours)) {
-    return `${hours}h`;
-  }
+  if (hours === Math.floor(hours)) return `${hours}h`;
   const h = Math.floor(hours);
   const m = Math.round((hours - h) * 60);
   return `${h}h ${m}m`;
 }
 
-export function positionLabel(position: Position): string {
-  const labels: Record<Position, string> = {
+export function positionLabel(position: Position | string): string {
+  const labels: Record<string, string> = {
     SERVER: "Server",
     BARTENDER: "Bartender",
     HOST: "Host",
@@ -53,8 +46,8 @@ export function positionLabel(position: Position): string {
   return labels[position] ?? position;
 }
 
-export function positionColor(position: Position): string {
-  const colors: Record<Position, string> = {
+export function positionColor(position: Position | string): string {
+  const colors: Record<string, string> = {
     SERVER: "bg-blue-100 text-blue-800",
     BARTENDER: "bg-purple-100 text-purple-800",
     HOST: "bg-pink-100 text-pink-800",
@@ -69,8 +62,9 @@ export function positionColor(position: Position): string {
   return colors[position] ?? "bg-gray-100 text-gray-800";
 }
 
-export function shiftStatusColor(status: ShiftStatus): string {
-  const colors: Record<ShiftStatus, string> = {
+export function shiftStatusColor(status: ShiftStatus | string): string {
+  const colors: Record<string, string> = {
+    DRAFT: "bg-yellow-100 text-yellow-700",
     SCHEDULED: "bg-blue-100 text-blue-700",
     CONFIRMED: "bg-green-100 text-green-700",
     COMPLETED: "bg-gray-100 text-gray-600",
@@ -80,8 +74,9 @@ export function shiftStatusColor(status: ShiftStatus): string {
   return colors[status] ?? "bg-gray-100 text-gray-600";
 }
 
-export function shiftStatusLabel(status: ShiftStatus): string {
-  const labels: Record<ShiftStatus, string> = {
+export function shiftStatusLabel(status: ShiftStatus | string): string {
+  const labels: Record<string, string> = {
+    DRAFT: "Draft",
     SCHEDULED: "Scheduled",
     CONFIRMED: "Confirmed",
     COMPLETED: "Completed",
@@ -89,6 +84,20 @@ export function shiftStatusLabel(status: ShiftStatus): string {
     NO_SHOW: "No Show",
   };
   return labels[status] ?? status;
+}
+
+export function performanceColor(score: number): string {
+  if (score >= 80) return "text-green-600";
+  if (score >= 60) return "text-blue-600";
+  if (score >= 40) return "text-yellow-600";
+  return "text-red-600";
+}
+
+export function performanceLabel(score: number): string {
+  if (score >= 80) return "Excellent";
+  if (score >= 60) return "Good";
+  if (score >= 40) return "Average";
+  return "Needs Improvement";
 }
 
 export function getInitials(name: string): string {

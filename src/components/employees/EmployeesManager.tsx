@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { Search, Plus, UserCheck, UserX, Edit2, Loader2 } from "lucide-react";
 import { UserWithStats, POSITIONS } from "@/types";
-import { cn, positionColor, positionLabel, getInitials, formatCurrency } from "@/lib/utils";
+import { cn, positionColor, positionLabel, getInitials, formatCurrency, performanceColor, performanceLabel } from "@/lib/utils";
 import { EmployeeModal } from "./EmployeeModal";
 import { toast } from "@/hooks/use-toast";
 import { format } from "date-fns";
@@ -134,6 +134,7 @@ export function EmployeesManager({ userRole }: EmployeesManagerProps) {
                 <tr className="bg-gray-50 border-b border-gray-200">
                   <th className="px-5 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">Employee</th>
                   <th className="px-5 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">Position</th>
+                  <th className="px-5 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">Performance</th>
                   <th className="px-5 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">Contact</th>
                   <th className="px-5 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">Rate</th>
                   <th className="px-5 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">Hired</th>
@@ -159,6 +160,22 @@ export function EmployeesManager({ userRole }: EmployeesManagerProps) {
                       <span className={cn("px-2.5 py-1 rounded-full text-xs font-medium", positionColor(emp.position))}>
                         {positionLabel(emp.position)}
                       </span>
+                    </td>
+                    <td className="px-5 py-3.5">
+                      <div className="flex items-center gap-2">
+                        <div className="w-16 h-1.5 bg-gray-200 rounded-full overflow-hidden">
+                          <div
+                            className={cn("h-full rounded-full", emp.performanceScore >= 80 ? "bg-green-500" : emp.performanceScore >= 60 ? "bg-blue-500" : emp.performanceScore >= 40 ? "bg-yellow-500" : "bg-red-500")}
+                            style={{ width: `${emp.performanceScore}%` }}
+                          />
+                        </div>
+                        <span className={cn("text-xs font-semibold", performanceColor(emp.performanceScore))}>
+                          {emp.performanceScore}
+                        </span>
+                      </div>
+                      <p className={cn("text-xs mt-0.5", performanceColor(emp.performanceScore))}>
+                        {performanceLabel(emp.performanceScore)}
+                      </p>
                     </td>
                     <td className="px-5 py-3.5 text-sm text-gray-600">{emp.phone ?? "—"}</td>
                     <td className="px-5 py-3.5 text-sm text-gray-600">

@@ -8,10 +8,13 @@ async function main() {
   console.log("Seeding database...");
 
   // Clear existing data
+  await prisma.shiftSwapRequest.deleteMany();
+  await prisma.shiftNote.deleteMany();
   await prisma.notification.deleteMany();
   await prisma.timeOffRequest.deleteMany();
   await prisma.availability.deleteMany();
   await prisma.shift.deleteMany();
+  await prisma.restaurant.deleteMany();
   await prisma.session.deleteMany();
   await prisma.account.deleteMany();
   await prisma.user.deleteMany();
@@ -27,33 +30,25 @@ async function main() {
       position: "GENERAL_MANAGER",
       phone: "555-0100",
       hourlyRate: 65.0,
+      performanceScore: 95,
       hireDate: new Date("2020-01-15"),
     },
   });
 
-  const manager1 = await prisma.user.create({
+  // Restaurant settings
+  await prisma.restaurant.create({
     data: {
-      name: "Maria Garcia",
-      email: "maria@schedit.com",
-      password: passwordHash,
-      role: "MANAGER",
-      position: "MANAGER",
-      phone: "555-0101",
-      hourlyRate: 45.0,
-      hireDate: new Date("2021-03-10"),
-    },
-  });
-
-  const manager2 = await prisma.user.create({
-    data: {
-      name: "James Wilson",
-      email: "james@schedit.com",
-      password: passwordHash,
-      role: "MANAGER",
-      position: "HEAD_CHEF",
-      phone: "555-0102",
-      hourlyRate: 50.0,
-      hireDate: new Date("2021-06-01"),
+      name: "The Rustic Spoon",
+      ownerId: admin.id,
+      openDays: JSON.stringify(["MONDAY", "TUESDAY", "WEDNESDAY", "THURSDAY", "FRIDAY", "SATURDAY", "SUNDAY"]),
+      openTime: "09:00",
+      closeTime: "23:00",
+      shiftTemplates: JSON.stringify([
+        { name: "Morning", start: "09:00", end: "17:00" },
+        { name: "Afternoon", start: "12:00", end: "20:00" },
+        { name: "Evening", start: "16:00", end: "00:00" },
+      ]),
+      minStaffPerShift: 3,
     },
   });
 
@@ -67,6 +62,7 @@ async function main() {
         position: "SERVER",
         phone: "555-0103",
         hourlyRate: 15.0,
+        performanceScore: 88,
         hireDate: new Date("2022-04-15"),
       },
     }),
@@ -79,6 +75,7 @@ async function main() {
         position: "BARTENDER",
         phone: "555-0104",
         hourlyRate: 18.0,
+        performanceScore: 72,
         hireDate: new Date("2022-07-20"),
       },
     }),
@@ -91,6 +88,7 @@ async function main() {
         position: "HOST",
         phone: "555-0105",
         hourlyRate: 14.0,
+        performanceScore: 65,
         hireDate: new Date("2023-01-10"),
       },
     }),
@@ -103,6 +101,7 @@ async function main() {
         position: "COOK",
         phone: "555-0106",
         hourlyRate: 20.0,
+        performanceScore: 55,
         hireDate: new Date("2022-11-05"),
       },
     }),
@@ -115,6 +114,7 @@ async function main() {
         position: "SERVER",
         phone: "555-0107",
         hourlyRate: 15.0,
+        performanceScore: 91,
         hireDate: new Date("2023-03-22"),
       },
     }),
@@ -127,6 +127,7 @@ async function main() {
         position: "SOUS_CHEF",
         phone: "555-0108",
         hourlyRate: 25.0,
+        performanceScore: 78,
         hireDate: new Date("2022-09-14"),
       },
     }),
@@ -139,6 +140,7 @@ async function main() {
         position: "BUSSER",
         phone: "555-0109",
         hourlyRate: 13.0,
+        performanceScore: 35,
         hireDate: new Date("2023-05-01"),
       },
     }),
@@ -151,15 +153,15 @@ async function main() {
         position: "DISHWASHER",
         phone: "555-0110",
         hourlyRate: 12.0,
+        performanceScore: 42,
         hireDate: new Date("2023-08-15"),
       },
     }),
   ]);
 
-  const allEmployees = [manager1, manager2, ...employees];
   const daysOfWeek = ["MONDAY", "TUESDAY", "WEDNESDAY", "THURSDAY", "FRIDAY", "SATURDAY", "SUNDAY"];
 
-  for (const employee of allEmployees) {
+  for (const employee of employees) {
     for (const day of daysOfWeek) {
       const isWeekend = day === "SATURDAY" || day === "SUNDAY";
       await prisma.availability.create({
@@ -174,7 +176,7 @@ async function main() {
     }
   }
 
-  // Create shifts for current week
+  // Create shifts for current week (published)
   const today = new Date();
   const weekStart = startOfWeek(today, { weekStartsOn: 1 });
 
@@ -188,7 +190,7 @@ async function main() {
 
   for (let dayOffset = 0; dayOffset < 7; dayOffset++) {
     const shiftDate = addDays(weekStart, dayOffset);
-    const shuffled = [...allEmployees].sort(() => Math.random() - 0.5).slice(0, 6);
+    const shuffled = [...employees].sort(() => Math.random() - 0.5).slice(0, 6);
 
     for (let i = 0; i < shuffled.length; i++) {
       const template = shiftTemplates[i % shiftTemplates.length];
@@ -200,6 +202,7 @@ async function main() {
         endTime: template.endTime,
         position: shuffled[i].position,
         status: isPast ? "COMPLETED" : "SCHEDULED",
+        isPublished: true,
         createdById: admin.id,
       });
     }
@@ -224,7 +227,7 @@ async function main() {
       endDate: addDays(today, 10),
       reason: "Medical appointment",
       status: "APPROVED",
-      reviewedBy: manager1.id,
+      reviewedBy: admin.id,
       reviewedAt: new Date(),
     },
   });
@@ -233,7 +236,7 @@ async function main() {
     data: {
       title: "New time-off request",
       message: `${employees[0].name} has submitted a time-off request.`,
-      recipientId: manager1.id,
+      recipientId: admin.id,
       senderId: employees[0].id,
       link: "/time-off",
     },
@@ -252,8 +255,8 @@ async function main() {
   console.log("\nDatabase seeded successfully!");
   console.log("\nTest accounts:");
   console.log("  Admin:    admin@schedit.com / password123");
-  console.log("  Manager:  maria@schedit.com / password123");
   console.log("  Employee: emily@schedit.com / password123");
+  console.log("  Employee: marcus@schedit.com / password123");
 }
 
 main()

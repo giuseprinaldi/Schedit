@@ -1,11 +1,12 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { format } from "date-fns";
 import { Loader2 } from "lucide-react";
+import { performanceColor, performanceLabel } from "@/lib/utils";
 import { UserWithStats, POSITIONS, ROLES } from "@/types";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
@@ -16,22 +17,24 @@ const createSchema = z.object({
   name: z.string().min(2, "At least 2 characters"),
   email: z.string().email("Invalid email"),
   password: z.string().min(8, "At least 8 characters"),
-  role: z.enum(["ADMIN", "MANAGER", "EMPLOYEE"] as const),
+  role: z.enum(["ADMIN", "EMPLOYEE"] as const),
   position: z.enum(POSITIONS as any),
   phone: z.string().optional(),
   hourlyRate: z.coerce.number().positive().optional().or(z.literal("")),
   hireDate: z.string().optional(),
+  performanceScore: z.coerce.number().min(0).max(100).default(50),
 });
 
 const editSchema = z.object({
   name: z.string().min(2, "At least 2 characters").optional(),
   email: z.string().email("Invalid email").optional(),
   password: z.string().min(8).optional().or(z.literal("")),
-  role: z.enum(["ADMIN", "MANAGER", "EMPLOYEE"] as const).optional(),
+  role: z.enum(["ADMIN", "EMPLOYEE"] as const).optional(),
   position: z.enum(POSITIONS as any).optional(),
   phone: z.string().optional(),
   hourlyRate: z.coerce.number().positive().optional().or(z.literal("")),
   hireDate: z.string().optional(),
+  performanceScore: z.coerce.number().min(0).max(100).optional(),
 });
 
 interface EmployeeModalProps {
@@ -44,6 +47,7 @@ interface EmployeeModalProps {
 
 export function EmployeeModal({ open, onClose, onSave, editingEmployee, isAdmin }: EmployeeModalProps) {
   const schema = editingEmployee ? editSchema : createSchema;
+  const [perfScore, setPerfScore] = useState(editingEmployee?.performanceScore ?? 50);
 
   const {
     register,
@@ -56,6 +60,7 @@ export function EmployeeModal({ open, onClose, onSave, editingEmployee, isAdmin 
 
   useEffect(() => {
     if (editingEmployee) {
+      setPerfScore(editingEmployee.performanceScore ?? 50);
       reset({
         name: editingEmployee.name,
         email: editingEmployee.email,
@@ -65,9 +70,11 @@ export function EmployeeModal({ open, onClose, onSave, editingEmployee, isAdmin 
         hourlyRate: editingEmployee.hourlyRate ?? "",
         hireDate: editingEmployee.hireDate ? format(new Date(editingEmployee.hireDate), "yyyy-MM-dd") : "",
         password: "",
+        performanceScore: editingEmployee.performanceScore ?? 50,
       });
     } else {
-      reset({ name: "", email: "", password: "", role: "EMPLOYEE", position: "SERVER", phone: "", hourlyRate: "", hireDate: "" });
+      setPerfScore(50);
+      reset({ name: "", email: "", password: "", role: "EMPLOYEE", position: "SERVER", phone: "", hourlyRate: "", hireDate: "", performanceScore: 50 });
     }
   }, [editingEmployee, reset]);
 
@@ -179,6 +186,32 @@ export function EmployeeModal({ open, onClose, onSave, editingEmployee, isAdmin 
             <label className="block text-sm font-medium text-gray-700 mb-1.5">Hire Date</label>
             <input {...register("hireDate")} type="date" className={inputClass} />
           </div>
+
+          {isAdmin && (
+            <div>
+              <div className="flex items-center justify-between mb-1.5">
+                <label className="block text-sm font-medium text-gray-700">Performance Score</label>
+                <span className={`text-sm font-semibold ${performanceColor(perfScore)}`}>
+                  {perfScore} — {performanceLabel(perfScore)}
+                </span>
+              </div>
+              <input
+                {...register("performanceScore")}
+                type="range"
+                min={0}
+                max={100}
+                step={1}
+                value={perfScore}
+                onChange={(e) => setPerfScore(Number(e.target.value))}
+                className="w-full accent-blue-600"
+              />
+              <div className="flex justify-between text-xs text-gray-400 mt-0.5">
+                <span>0</span>
+                <span>50</span>
+                <span>100</span>
+              </div>
+            </div>
+          )}
 
           <DialogFooter>
             <Button type="button" variant="outline" onClick={onClose}>Cancel</Button>
