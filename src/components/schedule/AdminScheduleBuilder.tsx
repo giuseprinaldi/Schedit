@@ -229,7 +229,8 @@ export function AdminScheduleBuilder({ currentUserId }: AdminScheduleBuilderProp
     try {
       const res = await fetch(`/api/shifts?scheduleId=${activeScheduleId}`);
       if (!res.ok) return;
-      setShifts(await res.json());
+      const data = await res.json();
+      setShifts(Array.isArray(data) ? data : []);
     } catch {
       toast({ title: "Error", description: "Failed to load shifts.", variant: "destructive" });
     } finally {
@@ -245,7 +246,7 @@ export function AdminScheduleBuilder({ currentUserId }: AdminScheduleBuilderProp
         fetch("/api/restaurant"),
       ]);
       const [empData, restData] = await Promise.all([empRes.json(), restRes.json()]);
-      setEmployees(empData);
+      setEmployees(Array.isArray(empData) ? empData : []);
       if (restData?.shiftTemplates) setShiftTemplates(restData.shiftTemplates);
     } catch { /* silent */ }
   }, []);
