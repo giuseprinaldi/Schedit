@@ -134,6 +134,7 @@ export function EmployeesManager({ userRole }: EmployeesManagerProps) {
                 <tr className="bg-gray-50 border-b border-gray-200">
                   <th className="px-5 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">Employee</th>
                   <th className="px-5 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">Position</th>
+                  <th className="px-5 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">Department</th>
                   <th className="px-5 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">Performance</th>
                   <th className="px-5 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">Contact</th>
                   <th className="px-5 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">Rate</th>
@@ -159,6 +160,11 @@ export function EmployeesManager({ userRole }: EmployeesManagerProps) {
                     <td className="px-5 py-3.5">
                       <span className={cn("px-2.5 py-1 rounded-full text-xs font-medium", positionColor(emp.position))}>
                         {positionLabel(emp.position)}
+                      </span>
+                    </td>
+                    <td className="px-5 py-3.5">
+                      <span className="px-2.5 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-700">
+                        {emp.department ?? "—"}
                       </span>
                     </td>
                     <td className="px-5 py-3.5">

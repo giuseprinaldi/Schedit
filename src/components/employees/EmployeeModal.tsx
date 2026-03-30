@@ -13,12 +13,23 @@ import { Button } from "@/components/ui/button";
 import { toast } from "@/hooks/use-toast";
 import { positionLabel } from "@/lib/utils";
 
+const DEPARTMENTS = [
+  "Front of House",
+  "Back of House",
+  "Bar",
+  "Ice Cream Stand",
+  "Management",
+  "Catering",
+  "Other",
+];
+
 const createSchema = z.object({
   name: z.string().min(2, "At least 2 characters"),
   email: z.string().email("Invalid email"),
   password: z.string().min(8, "At least 8 characters"),
   role: z.enum(["ADMIN", "EMPLOYEE"] as const),
   position: z.enum(POSITIONS as any),
+  department: z.string().default("Front of House"),
   phone: z.string().optional(),
   hourlyRate: z.coerce.number().positive().optional().or(z.literal("")),
   hireDate: z.string().optional(),
@@ -31,6 +42,7 @@ const editSchema = z.object({
   password: z.string().min(8).optional().or(z.literal("")),
   role: z.enum(["ADMIN", "EMPLOYEE"] as const).optional(),
   position: z.enum(POSITIONS as any).optional(),
+  department: z.string().optional(),
   phone: z.string().optional(),
   hourlyRate: z.coerce.number().positive().optional().or(z.literal("")),
   hireDate: z.string().optional(),
@@ -66,6 +78,7 @@ export function EmployeeModal({ open, onClose, onSave, editingEmployee, isAdmin 
         email: editingEmployee.email,
         role: editingEmployee.role,
         position: editingEmployee.position,
+        department: editingEmployee.department ?? "Front of House",
         phone: editingEmployee.phone ?? "",
         hourlyRate: editingEmployee.hourlyRate ?? "",
         hireDate: editingEmployee.hireDate ? format(new Date(editingEmployee.hireDate), "yyyy-MM-dd") : "",
@@ -74,7 +87,7 @@ export function EmployeeModal({ open, onClose, onSave, editingEmployee, isAdmin 
       });
     } else {
       setPerfScore(50);
-      reset({ name: "", email: "", password: "", role: "EMPLOYEE", position: "SERVER", phone: "", hourlyRate: "", hireDate: "", performanceScore: 50 });
+      reset({ name: "", email: "", password: "", role: "EMPLOYEE", position: "SERVER", department: "Front of House", phone: "", hourlyRate: "", hireDate: "", performanceScore: 50 });
     }
   }, [editingEmployee, reset]);
 
@@ -169,6 +182,15 @@ export function EmployeeModal({ open, onClose, onSave, editingEmployee, isAdmin 
                 </select>
               </div>
             )}
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1.5">Department</label>
+            <select {...register("department")} className={inputClass}>
+              {DEPARTMENTS.map((d) => (
+                <option key={d} value={d}>{d}</option>
+              ))}
+            </select>
           </div>
 
           <div className="grid grid-cols-2 gap-3">

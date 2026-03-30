@@ -12,8 +12,9 @@ export async function POST(req: NextRequest) {
   }
 
   const body = await req.json();
-  const { weekOf } = body;
+  const { weekOf, scheduleId } = body;
   if (!weekOf) return NextResponse.json({ error: "weekOf date required" }, { status: 400 });
+  if (!scheduleId) return NextResponse.json({ error: "scheduleId required" }, { status: 400 });
 
   const weekDate = new Date(weekOf);
   const weekStart = startOfWeek(weekDate, { weekStartsOn: 1 });
@@ -40,12 +41,9 @@ export async function POST(req: NextRequest) {
     },
   });
 
-  // Delete any existing DRAFT shifts for this week
+  // Delete any existing DRAFT shifts for this specific schedule
   await prisma.shift.deleteMany({
-    where: {
-      status: "DRAFT",
-      date: { gte: weekStart, lte: weekEnd },
-    },
+    where: { scheduleId, status: "DRAFT" },
   });
 
   const config = {
@@ -62,14 +60,13 @@ export async function POST(req: NextRequest) {
     }, { status: 400 });
   }
 
-  await prisma.shift.createMany({ data: generatedShifts });
+  await prisma.shift.createMany({
+    data: generatedShifts.map((s) => ({ ...s, scheduleId })),
+  });
 
   // Return the created shifts with user details
   const shifts = await prisma.shift.findMany({
-    where: {
-      status: "DRAFT",
-      date: { gte: weekStart, lte: weekEnd },
-    },
+    where: { scheduleId, status: "DRAFT" },
     include: {
       user: { select: { id: true, name: true, email: true, image: true, position: true, performanceScore: true } },
     },

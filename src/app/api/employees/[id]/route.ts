@@ -6,7 +6,7 @@ import { z } from "zod";
 import bcrypt from "bcryptjs";
 
 const POSITIONS = ["SERVER", "BARTENDER", "HOST", "COOK", "SOUS_CHEF", "HEAD_CHEF", "DISHWASHER", "BUSSER", "MANAGER", "GENERAL_MANAGER"] as const;
-const ROLES = ["ADMIN", "MANAGER", "EMPLOYEE"] as const;
+const ROLES = ["ADMIN", "EMPLOYEE"] as const;
 
 const updateEmployeeSchema = z.object({
   name: z.string().min(2).optional(),
@@ -14,8 +14,10 @@ const updateEmployeeSchema = z.object({
   password: z.string().min(8).optional(),
   role: z.enum(ROLES).optional(),
   position: z.enum(POSITIONS).optional(),
+  department: z.string().optional(),
   phone: z.string().optional().nullable(),
   hourlyRate: z.number().positive().optional().nullable(),
+  performanceScore: z.number().min(0).max(100).optional(),
   isActive: z.boolean().optional(),
   hireDate: z.string().optional(),
 });
@@ -32,9 +34,9 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
     where: { id: params.id },
     select: {
       id: true, name: true, email: true, role: true, position: true,
-      phone: true, hourlyRate: true, isActive: true, hireDate: true, image: true,
-      availability: true,
-      _count: { select: { shifts: true } },
+      department: true, phone: true, hourlyRate: true, performanceScore: true,
+      isActive: true, hireDate: true, image: true,
+      availability: true, _count: { select: { shifts: true } },
     },
   });
 
@@ -74,7 +76,9 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
     data: updateData,
     select: {
       id: true, name: true, email: true, role: true, position: true,
-      phone: true, hourlyRate: true, isActive: true, hireDate: true, image: true,
+      department: true, phone: true, hourlyRate: true, performanceScore: true,
+      isActive: true, hireDate: true, image: true,
+      _count: { select: { shifts: true } },
     },
   });
 

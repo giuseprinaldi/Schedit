@@ -78,6 +78,7 @@ export interface UserWithStats {
   email: string;
   role: Role;
   position: Position;
+  department: string;
   phone: string | null;
   hourlyRate: number | null;
   performanceScore: number;
@@ -87,6 +88,17 @@ export interface UserWithStats {
   _count?: {
     shifts: number;
   };
+}
+
+export interface ScheduleRecord {
+  id: string;
+  title: string;
+  weekOf: Date;
+  isPublished: boolean;
+  createdById: string;
+  createdAt: Date;
+  shifts?: ShiftWithUser[];
+  _count?: { shifts: number };
 }
 
 export interface ShiftWithUser {

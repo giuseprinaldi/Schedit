@@ -13,6 +13,8 @@ const createShiftSchema = z.object({
   endTime: z.string().regex(/^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$/),
   position: z.enum(POSITIONS),
   notes: z.string().optional(),
+  status: z.string().optional(),
+  scheduleId: z.string().optional(),
 });
 
 export async function GET(req: NextRequest) {
@@ -23,11 +25,15 @@ export async function GET(req: NextRequest) {
   const startDate = searchParams.get("startDate");
   const endDate = searchParams.get("endDate");
   const userId = searchParams.get("userId");
+  const scheduleId = searchParams.get("scheduleId");
 
   const where: any = {};
 
   if (startDate && endDate) {
     where.date = { gte: new Date(startDate), lte: new Date(endDate) };
+  }
+  if (scheduleId) {
+    where.scheduleId = scheduleId;
   }
 
   if (session.user.role === "EMPLOYEE") {
@@ -39,7 +45,7 @@ export async function GET(req: NextRequest) {
   const shifts = await prisma.shift.findMany({
     where,
     include: {
-      user: { select: { id: true, name: true, email: true, image: true, position: true } },
+      user: { select: { id: true, name: true, email: true, image: true, position: true, performanceScore: true } },
     },
     orderBy: [{ date: "asc" }, { startTime: "asc" }],
   });
@@ -60,15 +66,20 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Invalid data", details: result.error.flatten() }, { status: 400 });
   }
 
-  const { userId, date, startTime, endTime, position, notes } = result.data;
+  const { userId, date, startTime, endTime, position, notes, status, scheduleId } = result.data;
 
   const employee = await prisma.user.findUnique({ where: { id: userId } });
   if (!employee) return NextResponse.json({ error: "Employee not found" }, { status: 404 });
 
   const shift = await prisma.shift.create({
-    data: { userId, date: new Date(date), startTime, endTime, position, notes, createdById: session.user.id },
+    data: {
+      userId, date: new Date(date), startTime, endTime, position, notes,
+      status: status ?? "SCHEDULED",
+      scheduleId: scheduleId ?? null,
+      createdById: session.user.id,
+    },
     include: {
-      user: { select: { id: true, name: true, email: true, image: true, position: true } },
+      user: { select: { id: true, name: true, email: true, image: true, position: true, performanceScore: true } },
     },
   });
 
