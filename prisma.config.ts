@@ -3,6 +3,9 @@ import { defineConfig } from "prisma/config";
 
 export default defineConfig({
   schema: path.join(__dirname, "prisma/schema.prisma"),
+  migrations: {
+    seed: "npm run db:seed",
+  },
   datasource: {
     url: process.env.DATABASE_URL ?? "file:./prisma/dev.db",
   },
