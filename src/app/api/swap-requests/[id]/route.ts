@@ -7,7 +7,8 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
   const session = await getServerSession(authOptions);
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const { status } = await req.json();
+  const body = await req.json().catch(() => ({}));
+  const { status, action } = body as { status?: string; action?: string };
 
   const swapRequest = await prisma.shiftSwapRequest.findUnique({
     where: { id: params.id },
@@ -16,7 +17,7 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
   if (!swapRequest) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
   // Admin can approve/deny any request
-  if (session.user.role === "ADMIN") {
+  if (session.user.role === "ADMIN" && status) {
     const updated = await prisma.shiftSwapRequest.update({
       where: { id: params.id },
       data: { status },
@@ -51,6 +52,26 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
     const updated = await prisma.shiftSwapRequest.update({
       where: { id: params.id },
       data: { status: "CANCELLED" },
+      include: {
+        requester: { select: { id: true, name: true, position: true, image: true } },
+        target: { select: { id: true, name: true, position: true, image: true } },
+        shift: { select: { id: true, date: true, startTime: true, endTime: true, position: true } },
+      },
+    });
+    return NextResponse.json(updated);
+  }
+
+  // Employees can claim an open GIVEAWAY (no target yet, not their own)
+  if (
+    action === "claim" &&
+    swapRequest.type === "GIVEAWAY" &&
+    swapRequest.status === "PENDING" &&
+    swapRequest.requesterId !== session.user.id &&
+    !swapRequest.targetId
+  ) {
+    const updated = await prisma.shiftSwapRequest.update({
+      where: { id: params.id },
+      data: { targetId: session.user.id },
       include: {
         requester: { select: { id: true, name: true, position: true, image: true } },
         target: { select: { id: true, name: true, position: true, image: true } },

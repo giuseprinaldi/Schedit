@@ -47,9 +47,9 @@ async function main() {
       openTime: "09:00",
       closeTime: "23:00",
       shiftTemplates: JSON.stringify([
-        { name: "Morning", start: "09:00", end: "17:00" },
-        { name: "Afternoon", start: "12:00", end: "20:00" },
-        { name: "Evening", start: "16:00", end: "00:00" },
+        { name: "Morning", start: "09:00", end: "17:00", positions: ["SERVER", "HOST", "COOK", "BUSSER"] },
+        { name: "Afternoon", start: "12:00", end: "20:00", positions: ["SERVER", "BARTENDER", "COOK"] },
+        { name: "Evening", start: "16:00", end: "00:00", positions: ["SERVER", "BARTENDER", "HOST"] },
       ]),
       minStaffPerShift: 3,
     },
@@ -164,15 +164,18 @@ async function main() {
 
   const daysOfWeek = ["MONDAY", "TUESDAY", "WEDNESDAY", "THURSDAY", "FRIDAY", "SATURDAY", "SUNDAY"];
 
+  // Give roughly half the employees late availability (until midnight) so evening shifts get covered
+  const lateEmployees = new Set([employees[0].id, employees[1].id, employees[3].id, employees[5].id]);
+
   for (const employee of employees) {
     for (const day of daysOfWeek) {
-      const isWeekend = day === "SATURDAY" || day === "SUNDAY";
+      const isLate = lateEmployees.has(employee.id);
       await prisma.availability.create({
         data: {
           userId: employee.id,
           dayOfWeek: day,
           startTime: "09:00",
-          endTime: isWeekend ? "22:00" : "20:00",
+          endTime: isLate ? "00:00" : "20:00",
           isAvailable: true,
         },
       });

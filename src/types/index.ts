@@ -59,6 +59,7 @@ export interface ShiftTemplate {
   name: string;
   start: string;
   end: string;
+  positions?: string[]; // role-based slots, e.g. ["SERVER", "COOK", "HOST"]
 }
 
 export interface RestaurantSettings {

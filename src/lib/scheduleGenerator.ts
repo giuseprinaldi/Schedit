@@ -46,10 +46,13 @@ function isEmployeeAvailableForShift(
   if (!avail || !avail.isAvailable) return false;
 
   const availStart = timeToMinutes(avail.startTime);
-  const availEnd = timeToMinutes(avail.endTime);
+  let availEnd = timeToMinutes(avail.endTime);
+  // "00:00" as an end time means midnight (end of day = 1440 mins)
+  if (availEnd === 0) availEnd = 24 * 60;
   const shiftStartMins = timeToMinutes(shiftStart);
   let shiftEndMins = timeToMinutes(shiftEnd);
-  if (shiftEndMins <= shiftStartMins) shiftEndMins += 24 * 60; // overnight
+  if (shiftEndMins === 0) shiftEndMins = 24 * 60; // "00:00" end = midnight
+  if (shiftEndMins <= shiftStartMins) shiftEndMins += 24 * 60; // other overnight
 
   return availStart <= shiftStartMins && availEnd >= shiftEndMins;
 }

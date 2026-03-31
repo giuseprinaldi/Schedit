@@ -29,10 +29,20 @@ export default async function DashboardPage() {
         where: { date: { gte: todayStart, lte: todayEnd }, status: { in: ["SCHEDULED", "CONFIRMED"] } },
       }),
       prisma.timeOffRequest.count({ where: { status: "PENDING" } }),
-      prisma.shift.findMany({
-        where: { date: { gte: weekStart, lte: weekEnd }, status: { in: ["SCHEDULED", "CONFIRMED", "COMPLETED"] } },
-        include: { user: { select: { hourlyRate: true } } },
-      }),
+      session.user.role === "EMPLOYEE"
+        ? prisma.shift.findMany({
+            where: {
+              userId: session.user.id,
+              date: { gte: weekStart, lte: weekEnd },
+              isPublished: true,
+              status: { in: ["SCHEDULED", "CONFIRMED", "COMPLETED"] },
+            },
+            include: { user: { select: { hourlyRate: true } } },
+          })
+        : prisma.shift.findMany({
+            where: { date: { gte: weekStart, lte: weekEnd }, status: { in: ["SCHEDULED", "CONFIRMED", "COMPLETED"] } },
+            include: { user: { select: { hourlyRate: true } } },
+          }),
       prisma.shift.findMany({
         where: {
           userId: session.user.id,

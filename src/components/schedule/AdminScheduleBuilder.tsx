@@ -27,14 +27,15 @@ import { ShiftNotesModal } from "./ShiftNotesModal";
 const DAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 
 // Cell ID helpers — use "::" to avoid conflicts with date dashes
-function makeCellId(dateStr: string, tIndex: number): string {
-  return `cell::${dateStr}::${tIndex}`;
+function makeCellId(dateStr: string, tIndex: number, position?: string): string {
+  return position ? `cell::${dateStr}::${tIndex}::${position}` : `cell::${dateStr}::${tIndex}`;
 }
-function parseCellId(cellId: string): { dateStr: string; templateIndex: number } | null {
+function parseCellId(cellId: string): { dateStr: string; templateIndex: number; position?: string } | null {
   if (!cellId.startsWith("cell::")) return null;
   const parts = cellId.split("::");
-  if (parts.length !== 3) return null;
-  return { dateStr: parts[1], templateIndex: parseInt(parts[2]) };
+  if (parts.length === 3) return { dateStr: parts[1], templateIndex: parseInt(parts[2]) };
+  if (parts.length === 4) return { dateStr: parts[1], templateIndex: parseInt(parts[2]), position: parts[3] };
+  return null;
 }
 
 // ── Draggable employee card ──────────────────────────────────────────────────
@@ -71,16 +72,17 @@ function DraggableEmployee({ employee }: { employee: UserWithStats }) {
 
 // ── Droppable shift cell ─────────────────────────────────────────────────────
 function DroppableShiftCell({
-  cellId, shifts, onDelete, onAddShift, onOpenNotes, date, templateStart, templateEnd,
+  cellId, shifts, onDelete, onAddShift, onOpenNotes, date, templateStart, templateEnd, slotPosition,
 }: {
   cellId: string;
   shifts: ShiftWithUser[];
   onDelete: (id: string) => void;
-  onAddShift: (date: Date, start: string, end: string) => void;
+  onAddShift: (date: Date, start: string, end: string, position?: string) => void;
   onOpenNotes: (shift: ShiftWithUser) => void;
   date: Date;
   templateStart: string;
   templateEnd: string;
+  slotPosition?: string;
 }) {
   const { isOver, setNodeRef } = useDroppable({ id: cellId });
 
@@ -88,7 +90,7 @@ function DroppableShiftCell({
     <div
       ref={setNodeRef}
       className={cn(
-        "min-h-[80px] p-1.5 rounded-lg border-2 border-dashed transition-colors space-y-1",
+        "min-h-[72px] p-1.5 rounded-lg border-2 border-dashed transition-colors space-y-1",
         isOver ? "border-blue-400 bg-blue-50" : "border-gray-200 bg-white hover:border-gray-300"
       )}
     >
@@ -96,7 +98,7 @@ function DroppableShiftCell({
         <ShiftCellCard key={shift.id} shift={shift} onDelete={onDelete} onOpenNotes={onOpenNotes} />
       ))}
       <button
-        onClick={() => onAddShift(date, templateStart, templateEnd)}
+        onClick={() => onAddShift(date, templateStart, templateEnd, slotPosition)}
         className="w-full py-1 rounded text-xs text-gray-400 hover:text-blue-500 hover:bg-blue-50 flex items-center justify-center gap-1 transition"
       >
         <Plus className="w-3 h-3" /> Add
@@ -181,7 +183,7 @@ export function AdminScheduleBuilder({ currentUserId }: AdminScheduleBuilderProp
   const [loading, setLoading] = useState(true);
   const [generating, setGenerating] = useState(false);
   const [publishing, setPublishing] = useState(false);
-  const [shiftTemplates, setShiftTemplates] = useState<{ name: string; start: string; end: string }[]>([
+  const [shiftTemplates, setShiftTemplates] = useState<import("@/types").ShiftTemplate[]>([
     { name: "Morning", start: "09:00", end: "17:00" },
     { name: "Evening", start: "16:00", end: "23:00" },
   ]);
@@ -259,13 +261,14 @@ export function AdminScheduleBuilder({ currentUserId }: AdminScheduleBuilderProp
   const hasDraftShifts = shifts.some((s) => s.status === "DRAFT");
   const hasPublishedShifts = shifts.some((s) => s.status === "SCHEDULED");
 
-  const getShiftsForCell = (date: Date, templateStart: string, templateEnd: string) => {
+  const getShiftsForCell = (date: Date, templateStart: string, templateEnd: string, position?: string) => {
     const dateStr = format(date, "yyyy-MM-dd");
     return shifts.filter(
       (s) =>
         format(new Date(s.date), "yyyy-MM-dd") === dateStr &&
         s.startTime === templateStart &&
-        s.endTime === templateEnd
+        s.endTime === templateEnd &&
+        (!position || s.position === position)
     );
   };
 
@@ -399,15 +402,26 @@ export function AdminScheduleBuilder({ currentUserId }: AdminScheduleBuilderProp
     const parsed = parseCellId(String(over.id));
     if (!parsed) return;
 
-    const { dateStr, templateIndex } = parsed;
+    const { dateStr, templateIndex, position: slotPosition } = parsed;
     const template = shiftTemplates[templateIndex];
     if (!template) return;
 
     const employee: UserWithStats = dragData.employee;
+
+    // Enforce role matching when slot has a position requirement
+    if (slotPosition && employee.position !== slotPosition) {
+      toast({
+        title: "Role mismatch",
+        description: `This slot requires a ${positionLabel(slotPosition)}. ${employee.name} is a ${positionLabel(employee.position)}.`,
+        variant: "destructive",
+      });
+      return;
+    }
+
     // Use noon to avoid timezone day-shift issues
     const date = new Date(`${dateStr}T12:00:00`);
 
-    const existingInCell = getShiftsForCell(date, template.start, template.end);
+    const existingInCell = getShiftsForCell(date, template.start, template.end, slotPosition);
     if (existingInCell.some((s) => s.userId === employee.id)) {
       toast({ title: "Already scheduled", description: `${employee.name} is already in this slot.` });
       return;
@@ -422,7 +436,7 @@ export function AdminScheduleBuilder({ currentUserId }: AdminScheduleBuilderProp
           date: date.toISOString(),
           startTime: template.start,
           endTime: template.end,
-          position: employee.position,
+          position: slotPosition ?? employee.position,
           status: "DRAFT",
           scheduleId: activeScheduleId,
         }),
@@ -436,10 +450,11 @@ export function AdminScheduleBuilder({ currentUserId }: AdminScheduleBuilderProp
     }
   };
 
-  const handleAddShift = (date: Date, start: string, end: string) => {
+  const handleAddShift = (date: Date, start: string, end: string, position?: string) => {
     setPreselectedDate(date);
     setPreselectedTimes({ start, end });
     setShowShiftModal(true);
+    // position hint could be used by ShiftModal in future; ignored for now
   };
 
   const handleShiftSaved = (shift: ShiftWithUser) => {
@@ -660,41 +675,72 @@ export function AdminScheduleBuilder({ currentUserId }: AdminScheduleBuilderProp
                 })}
               </div>
 
-              {shiftTemplates.map((template, tIndex) => (
-                <div key={tIndex} className="grid border-b border-gray-100 last:border-b-0" style={{ gridTemplateColumns: `90px repeat(7, 1fr)` }}>
-                  <div className="px-3 py-3 bg-gray-50 border-r border-gray-200 flex flex-col justify-center">
-                    <p className="text-xs font-semibold text-gray-700">{template.name}</p>
-                    <p className="text-[10px] text-gray-400 mt-0.5">
-                      {formatTime(template.start)}–{formatTime(template.end)}
-                    </p>
+              {shiftTemplates.map((template, tIndex) => {
+                const positions = template.positions && template.positions.length > 0
+                  ? template.positions
+                  : [undefined]; // one generic slot
+
+                return positions.map((slotPos, pIndex) => (
+                  <div
+                    key={`${tIndex}-${pIndex}`}
+                    className={cn(
+                      "grid border-b border-gray-100 last:border-b-0",
+                      pIndex > 0 && "border-t-0"
+                    )}
+                    style={{ gridTemplateColumns: `90px repeat(7, 1fr)` }}
+                  >
+                    {/* Row label */}
+                    <div className={cn(
+                      "px-3 py-2 border-r border-gray-200 flex flex-col justify-center",
+                      pIndex === 0 ? "bg-gray-50 pt-3" : "bg-gray-50/60 border-t border-gray-100"
+                    )}>
+                      {pIndex === 0 && (
+                        <>
+                          <p className="text-xs font-semibold text-gray-700">{template.name}</p>
+                          <p className="text-[10px] text-gray-400 mt-0.5">
+                            {formatTime(template.start)}–{formatTime(template.end)}
+                          </p>
+                        </>
+                      )}
+                      {slotPos && (
+                        <span className={cn(
+                          "inline-block text-[10px] font-semibold px-1.5 py-0.5 rounded mt-1 self-start",
+                          pIndex === 0 ? "bg-slate-200 text-slate-700" : "bg-slate-100 text-slate-600"
+                        )}>
+                          {positionLabel(slotPos)}
+                        </span>
+                      )}
+                    </div>
+
+                    {DAYS.map((_, dayIndex) => {
+                      const date = addDays(weekStart, dayIndex);
+                      const dateStr = format(date, "yyyy-MM-dd");
+                      const cellId = makeCellId(dateStr, tIndex, slotPos);
+                      const cellShifts = getShiftsForCell(date, template.start, template.end, slotPos);
+                      const today = isToday(date);
+                      return (
+                        <div key={dayIndex} className={cn("p-1.5 border-r border-gray-100 last:border-r-0", today && "bg-blue-50/30")}>
+                          {loading ? (
+                            <div className="min-h-[72px] bg-gray-50 rounded-lg animate-pulse" />
+                          ) : (
+                            <DroppableShiftCell
+                              cellId={cellId}
+                              shifts={cellShifts}
+                              onDelete={handleDeleteShift}
+                              onAddShift={handleAddShift}
+                              onOpenNotes={(s) => setNotesShift(s)}
+                              date={date}
+                              templateStart={template.start}
+                              templateEnd={template.end}
+                              slotPosition={slotPos}
+                            />
+                          )}
+                        </div>
+                      );
+                    })}
                   </div>
-                  {DAYS.map((_, dayIndex) => {
-                    const date = addDays(weekStart, dayIndex);
-                    const dateStr = format(date, "yyyy-MM-dd");
-                    const cellId = makeCellId(dateStr, tIndex);
-                    const cellShifts = getShiftsForCell(date, template.start, template.end);
-                    const today = isToday(date);
-                    return (
-                      <div key={dayIndex} className={cn("p-1.5 border-r border-gray-100 last:border-r-0", today && "bg-blue-50/30")}>
-                        {loading ? (
-                          <div className="min-h-[80px] bg-gray-50 rounded-lg animate-pulse" />
-                        ) : (
-                          <DroppableShiftCell
-                            cellId={cellId}
-                            shifts={cellShifts}
-                            onDelete={handleDeleteShift}
-                            onAddShift={handleAddShift}
-                            onOpenNotes={(s) => setNotesShift(s)}
-                            date={date}
-                            templateStart={template.start}
-                            templateEnd={template.end}
-                          />
-                        )}
-                      </div>
-                    );
-                  })}
-                </div>
-              ))}
+                ));
+              })}
             </div>
           )}
         </div>

@@ -20,7 +20,12 @@ export async function GET(req: NextRequest) {
 
   const where: any = {};
   if (session.user.role === "EMPLOYEE") {
-    where.OR = [{ requesterId: session.user.id }, { targetId: session.user.id }];
+    // Own requests/targets + open GIVEAWAY shifts from others (so they can claim)
+    where.OR = [
+      { requesterId: session.user.id },
+      { targetId: session.user.id },
+      { type: "GIVEAWAY", status: "PENDING" },
+    ];
   }
   if (status) where.status = status;
 
