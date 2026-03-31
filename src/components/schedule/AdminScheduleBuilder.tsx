@@ -94,6 +94,11 @@ function DroppableShiftCell({
         isOver ? "border-blue-400 bg-blue-50" : "border-gray-200 bg-white hover:border-gray-300"
       )}
     >
+      {slotPosition && (
+        <div className="px-1.5 py-0.5 rounded text-[10px] font-bold tracking-wide text-slate-500 uppercase bg-slate-100 inline-block mb-0.5">
+          {positionLabel(slotPosition)}
+        </div>
+      )}
       {shifts.map((shift) => (
         <ShiftCellCard key={shift.id} shift={shift} onDelete={onDelete} onOpenNotes={onOpenNotes} />
       ))}
@@ -196,6 +201,10 @@ export function AdminScheduleBuilder({ currentUserId }: AdminScheduleBuilderProp
   const [showNewScheduleModal, setShowNewScheduleModal] = useState(false);
   const [renamingId, setRenamingId] = useState<string | null>(null);
   const [renameValue, setRenameValue] = useState("");
+  const [editingPos, setEditingPos] = useState<{ tIndex: number; pIndex: number } | null>(null);
+  const [editPosValue, setEditPosValue] = useState("");
+  const [addingSlotTo, setAddingSlotTo] = useState<number | null>(null);
+  const [addSlotValue, setAddSlotValue] = useState("");
 
   const weekStart = startOfWeek(currentWeek, { weekStartsOn: 1 });
   const weekEnd = endOfWeek(currentWeek, { weekStartsOn: 1 });
@@ -450,6 +459,51 @@ export function AdminScheduleBuilder({ currentUserId }: AdminScheduleBuilderProp
     }
   };
 
+  // ── Position slot editing ────────────────────────────────────────────────
+  const saveTemplates = async (updated: import("@/types").ShiftTemplate[]) => {
+    setShiftTemplates(updated);
+    try {
+      await fetch("/api/restaurant", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ shiftTemplates: updated }),
+      });
+    } catch { /* UI already updated, silent fail */ }
+  };
+
+  const handleConfirmRenamePos = (tIndex: number, pIndex: number) => {
+    const val = editPosValue.trim().toUpperCase();
+    if (!val) { setEditingPos(null); return; }
+    const updated = shiftTemplates.map((t, ti) => {
+      if (ti !== tIndex) return t;
+      const positions = [...(t.positions ?? [])];
+      positions[pIndex] = val;
+      return { ...t, positions };
+    });
+    saveTemplates(updated);
+    setEditingPos(null);
+  };
+
+  const handleRemovePosition = (tIndex: number, pIndex: number) => {
+    const updated = shiftTemplates.map((t, ti) => {
+      if (ti !== tIndex) return t;
+      return { ...t, positions: (t.positions ?? []).filter((_, i) => i !== pIndex) };
+    });
+    saveTemplates(updated);
+  };
+
+  const handleConfirmAddSlot = (tIndex: number) => {
+    const val = addSlotValue.trim().toUpperCase();
+    if (!val) { setAddingSlotTo(null); return; }
+    const updated = shiftTemplates.map((t, ti) => {
+      if (ti !== tIndex) return t;
+      return { ...t, positions: [...(t.positions ?? []), val] };
+    });
+    saveTemplates(updated);
+    setAddingSlotTo(null);
+    setAddSlotValue("");
+  };
+
   const handleAddShift = (date: Date, start: string, end: string, position?: string) => {
     setPreselectedDate(date);
     setPreselectedTimes({ start, end });
@@ -661,7 +715,7 @@ export function AdminScheduleBuilder({ currentUserId }: AdminScheduleBuilderProp
           {activeSchedule && (
             <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
               {/* Day headers */}
-              <div className="grid border-b border-gray-200" style={{ gridTemplateColumns: `90px repeat(7, 1fr)` }}>
+              <div className="grid border-b border-gray-200" style={{ gridTemplateColumns: `110px repeat(7, 1fr)` }}>
                 <div className="px-3 py-3 bg-gray-50 text-xs font-medium text-gray-500 border-r border-gray-200">Shift</div>
                 {DAYS.map((day, i) => {
                   const date = addDays(weekStart, i);
@@ -680,66 +734,124 @@ export function AdminScheduleBuilder({ currentUserId }: AdminScheduleBuilderProp
                   ? template.positions
                   : [undefined]; // one generic slot
 
-                return positions.map((slotPos, pIndex) => (
-                  <div
-                    key={`${tIndex}-${pIndex}`}
-                    className={cn(
-                      "grid border-b border-gray-100 last:border-b-0",
-                      pIndex > 0 && "border-t-0"
-                    )}
-                    style={{ gridTemplateColumns: `90px repeat(7, 1fr)` }}
-                  >
-                    {/* Row label */}
-                    <div className={cn(
-                      "px-3 py-2 border-r border-gray-200 flex flex-col justify-center",
-                      pIndex === 0 ? "bg-gray-50 pt-3" : "bg-gray-50/60 border-t border-gray-100"
-                    )}>
-                      {pIndex === 0 && (
-                        <>
-                          <p className="text-xs font-semibold text-gray-700">{template.name}</p>
-                          <p className="text-[10px] text-gray-400 mt-0.5">
-                            {formatTime(template.start)}–{formatTime(template.end)}
-                          </p>
-                        </>
-                      )}
-                      {slotPos && (
-                        <span className={cn(
-                          "inline-block text-[10px] font-semibold px-1.5 py-0.5 rounded mt-1 self-start",
-                          pIndex === 0 ? "bg-slate-200 text-slate-700" : "bg-slate-100 text-slate-600"
+                return (
+                  <div key={tIndex} className="border-b border-gray-200 last:border-b-0">
+                    {positions.map((slotPos, pIndex) => (
+                      <div
+                        key={`${tIndex}-${pIndex}`}
+                        className="grid"
+                        style={{ gridTemplateColumns: `110px repeat(7, 1fr)` }}
+                      >
+                        {/* Row label — template info on first row, editable position chip on all rows */}
+                        <div className={cn(
+                          "px-2 py-2 border-r border-gray-200 flex flex-col justify-center gap-1",
+                          pIndex === 0 ? "bg-gray-50 pt-3" : "bg-gray-50/60"
                         )}>
-                          {positionLabel(slotPos)}
-                        </span>
-                      )}
-                    </div>
-
-                    {DAYS.map((_, dayIndex) => {
-                      const date = addDays(weekStart, dayIndex);
-                      const dateStr = format(date, "yyyy-MM-dd");
-                      const cellId = makeCellId(dateStr, tIndex, slotPos);
-                      const cellShifts = getShiftsForCell(date, template.start, template.end, slotPos);
-                      const today = isToday(date);
-                      return (
-                        <div key={dayIndex} className={cn("p-1.5 border-r border-gray-100 last:border-r-0", today && "bg-blue-50/30")}>
-                          {loading ? (
-                            <div className="min-h-[72px] bg-gray-50 rounded-lg animate-pulse" />
-                          ) : (
-                            <DroppableShiftCell
-                              cellId={cellId}
-                              shifts={cellShifts}
-                              onDelete={handleDeleteShift}
-                              onAddShift={handleAddShift}
-                              onOpenNotes={(s) => setNotesShift(s)}
-                              date={date}
-                              templateStart={template.start}
-                              templateEnd={template.end}
-                              slotPosition={slotPos}
-                            />
+                          {pIndex === 0 && (
+                            <>
+                              <p className="text-xs font-semibold text-gray-700 leading-tight">{template.name}</p>
+                              <p className="text-[10px] text-gray-400">
+                                {formatTime(template.start)}–{formatTime(template.end)}
+                              </p>
+                            </>
+                          )}
+                          {slotPos !== undefined && (
+                            <div className="flex items-center gap-0.5 mt-0.5">
+                              {editingPos?.tIndex === tIndex && editingPos?.pIndex === pIndex ? (
+                                <input
+                                  autoFocus
+                                  value={editPosValue}
+                                  onChange={(e) => setEditPosValue(e.target.value)}
+                                  onBlur={() => handleConfirmRenamePos(tIndex, pIndex)}
+                                  onKeyDown={(e) => {
+                                    if (e.key === "Enter") handleConfirmRenamePos(tIndex, pIndex);
+                                    if (e.key === "Escape") setEditingPos(null);
+                                  }}
+                                  className="w-full text-[10px] px-1 py-0.5 border border-blue-400 rounded focus:outline-none bg-white"
+                                />
+                              ) : (
+                                <>
+                                  <button
+                                    onClick={() => { setEditingPos({ tIndex, pIndex }); setEditPosValue(slotPos); }}
+                                    className="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-slate-200 text-slate-700 hover:bg-slate-300 transition truncate max-w-[62px]"
+                                    title="Click to rename"
+                                  >
+                                    {positionLabel(slotPos)}
+                                  </button>
+                                  <button
+                                    onClick={() => handleRemovePosition(tIndex, pIndex)}
+                                    className="p-0.5 rounded hover:bg-red-100 text-gray-300 hover:text-red-500 transition flex-shrink-0"
+                                    title="Remove slot"
+                                  >
+                                    <X className="w-2.5 h-2.5" />
+                                  </button>
+                                </>
+                              )}
+                            </div>
                           )}
                         </div>
-                      );
-                    })}
+
+                        {DAYS.map((_, dayIndex) => {
+                          const date = addDays(weekStart, dayIndex);
+                          const dateStr = format(date, "yyyy-MM-dd");
+                          const cellId = makeCellId(dateStr, tIndex, slotPos);
+                          const cellShifts = getShiftsForCell(date, template.start, template.end, slotPos);
+                          const today = isToday(date);
+                          return (
+                            <div key={dayIndex} className={cn("p-1.5 border-r border-gray-100 last:border-r-0", today && "bg-blue-50/30")}>
+                              {loading ? (
+                                <div className="min-h-[72px] bg-gray-50 rounded-lg animate-pulse" />
+                              ) : (
+                                <DroppableShiftCell
+                                  cellId={cellId}
+                                  shifts={cellShifts}
+                                  onDelete={handleDeleteShift}
+                                  onAddShift={handleAddShift}
+                                  onOpenNotes={(s) => setNotesShift(s)}
+                                  date={date}
+                                  templateStart={template.start}
+                                  templateEnd={template.end}
+                                  slotPosition={slotPos}
+                                />
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    ))}
+
+                    {/* Add Slot row */}
+                    <div className="grid border-t border-dashed border-gray-100" style={{ gridTemplateColumns: `110px repeat(7, 1fr)` }}>
+                      <div className="px-2 py-1.5 bg-gray-50 border-r border-gray-200">
+                        {addingSlotTo === tIndex ? (
+                          <input
+                            autoFocus
+                            value={addSlotValue}
+                            onChange={(e) => setAddSlotValue(e.target.value)}
+                            onBlur={() => handleConfirmAddSlot(tIndex)}
+                            onKeyDown={(e) => {
+                              if (e.key === "Enter") handleConfirmAddSlot(tIndex);
+                              if (e.key === "Escape") { setAddingSlotTo(null); setAddSlotValue(""); }
+                            }}
+                            placeholder="e.g. SERVER"
+                            className="w-full text-[10px] px-1.5 py-1 border border-blue-400 rounded focus:outline-none bg-white"
+                          />
+                        ) : (
+                          <button
+                            onClick={() => setAddingSlotTo(tIndex)}
+                            className="flex items-center gap-0.5 text-[10px] text-gray-400 hover:text-blue-500 transition"
+                          >
+                            <Plus className="w-3 h-3" /> Add Slot
+                          </button>
+                        )}
+                      </div>
+                      {/* Empty day cells for this row */}
+                      {DAYS.map((_, i) => (
+                        <div key={i} className="border-r border-gray-100 last:border-r-0" />
+                      ))}
+                    </div>
                   </div>
-                ));
+                );
               })}
             </div>
           )}
