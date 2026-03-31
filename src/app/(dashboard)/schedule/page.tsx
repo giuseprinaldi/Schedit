@@ -23,7 +23,7 @@ export default async function SchedulePage() {
         {isAdmin ? (
           <AdminScheduleBuilder currentUserId={session.user.id} />
         ) : (
-          <EmployeeScheduleFeed userId={session.user.id} />
+          <EmployeeScheduleFeed userId={session.user.id} userPosition={session.user.position} />
         )}
       </div>
     </div>

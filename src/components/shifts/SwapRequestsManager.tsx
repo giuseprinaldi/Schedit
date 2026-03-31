@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { format } from "date-fns";
-import { CheckCircle, XCircle, ArrowLeftRight, Gift, Clock, Loader2, Trash2 } from "lucide-react";
+import { CheckCircle, XCircle, ArrowLeftRight, Gift, Clock, Loader2, Trash2, Users, User } from "lucide-react";
 import { ShiftSwapRequestWithDetails, SwapStatus } from "@/types";
 import { cn, formatTime, positionLabel, getInitials } from "@/lib/utils";
 import { toast } from "@/hooks/use-toast";
@@ -104,26 +104,44 @@ export function SwapRequestsManager({ userId, userRole }: SwapRequestsManagerPro
           {requests.map((req) => {
             const statusConfig = STATUS_CONFIG[req.status as SwapStatus];
             const isOwn = req.requesterId === userId;
-            const TypeIcon = req.type === "SWAP" ? ArrowLeftRight : Gift;
+            // Open giveaway = GIVEAWAY with no claimer yet → admin must wait
+            const isOpenGiveaway = req.type === "GIVEAWAY" && !req.targetId;
+            // Sub-label for giveaway kind
+            const giveawayKind = req.type === "GIVEAWAY"
+              ? (req.targetId ? (isOwn || req.requesterId !== userId ? "Direct Handoff" : "Direct Handoff") : "Open for Grabs")
+              : null;
 
             return (
-              <div key={req.id} className="bg-white rounded-xl border border-gray-200 p-5 shadow-sm">
+              <div key={req.id} className={cn(
+                "bg-white rounded-xl border p-5 shadow-sm",
+                isOpenGiveaway && req.status === "PENDING" ? "border-amber-200 bg-amber-50/30" : "border-gray-200"
+              )}>
                 <div className="flex items-start justify-between gap-4 flex-wrap">
                   <div className="flex items-start gap-3">
                     <div className={cn(
                       "w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0",
-                      req.type === "SWAP" ? "bg-blue-100" : "bg-purple-100"
+                      req.type === "SWAP" ? "bg-blue-100" : isOpenGiveaway ? "bg-amber-100" : "bg-purple-100"
                     )}>
-                      <TypeIcon className={cn("w-4.5 h-4.5", req.type === "SWAP" ? "text-blue-600" : "text-purple-600")} size={18} />
+                      {req.type === "SWAP"
+                        ? <ArrowLeftRight className="text-blue-600" size={18} />
+                        : isOpenGiveaway
+                          ? <Users className="text-amber-600" size={18} />
+                          : <User className="text-purple-600" size={18} />
+                      }
                     </div>
                     <div>
                       <div className="flex items-center gap-2 flex-wrap">
                         <span className="text-sm font-semibold text-gray-900">
-                          {req.type === "SWAP" ? "Shift Swap" : "Shift Giveaway"}
+                          {req.type === "SWAP" ? "Shift Swap" : `Shift Giveaway${giveawayKind ? ` — ${giveawayKind}` : ""}`}
                         </span>
                         <span className={cn("px-2 py-0.5 rounded-full text-xs font-medium", statusConfig.color)}>
                           {statusConfig.label}
                         </span>
+                        {isOpenGiveaway && req.status === "PENDING" && (
+                          <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-amber-100 text-amber-700">
+                            Awaiting Claim
+                          </span>
+                        )}
                       </div>
 
                       {/* Shift info */}
@@ -140,9 +158,9 @@ export function SwapRequestsManager({ userId, userRole }: SwapRequestsManagerPro
                             {getInitials(req.requester.name)}
                           </div>
                           <span className="text-xs text-gray-700">{req.requester.name}</span>
-                          <span className="text-xs text-gray-400">(requesting)</span>
+                          <span className="text-xs text-gray-400">(giving away)</span>
                         </div>
-                        {req.target && (
+                        {req.target ? (
                           <>
                             <span className="text-gray-300">→</span>
                             <div className="flex items-center gap-1.5">
@@ -150,23 +168,31 @@ export function SwapRequestsManager({ userId, userRole }: SwapRequestsManagerPro
                                 {getInitials(req.target.name)}
                               </div>
                               <span className="text-xs text-gray-700">{req.target.name}</span>
+                              {req.type === "GIVEAWAY" && !isOwn && (
+                                <span className="text-xs text-gray-400">(claimed)</span>
+                              )}
                             </div>
                           </>
-                        )}
-                        {!req.target && (
-                          <span className="text-xs text-gray-400">→ Open to anyone</span>
+                        ) : (
+                          <span className="text-xs text-amber-600 font-medium">→ Waiting for someone to claim</span>
                         )}
                       </div>
 
                       {req.message && (
                         <p className="text-xs text-gray-500 italic mt-1.5">&quot;{req.message}&quot;</p>
                       )}
+
+                      {isOpenGiveaway && req.status === "PENDING" && isAdmin && (
+                        <p className="text-xs text-amber-600 mt-2">
+                          ⚠ An employee must claim this shift before you can approve.
+                        </p>
+                      )}
                     </div>
                   </div>
 
                   {/* Actions */}
                   <div className="flex items-center gap-2 flex-shrink-0">
-                    {isAdmin && req.status === "PENDING" && (
+                    {isAdmin && req.status === "PENDING" && !isOpenGiveaway && (
                       <>
                         <button
                           onClick={() => handleReview(req.id, "APPROVED")}
